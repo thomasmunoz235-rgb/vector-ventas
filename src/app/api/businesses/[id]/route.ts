@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { db } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { verifySessionToken } from '@/lib/session'
 
 const EDITABLE_COLUMNS = [
@@ -39,7 +39,7 @@ export async function PATCH(
       : value === '' ? null : value
 
   try {
-    await db.execute({
+    await getDb().execute({
       sql: `UPDATE businesses SET ${column} = ?, updated_at = ? WHERE id = ?`,
       args: [finalValue, Math.floor(Date.now() / 1000), id],
     })

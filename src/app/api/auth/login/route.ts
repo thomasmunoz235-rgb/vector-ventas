@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { pbkdf2Sync, timingSafeEqual } from 'crypto'
-import { db } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { createSessionToken } from '@/lib/session'
 
 function verifyPassword(password: string, stored: string): boolean {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
     }
 
-    const result = await db.execute({
+    const result = await getDb().execute({
       sql: 'SELECT username, password_hash FROM users WHERE username = ? LIMIT 1',
       args: [user],
     })

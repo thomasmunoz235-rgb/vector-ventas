@@ -11,10 +11,3 @@ export function getDb() {
   }
   return _db
 }
-
-// Backwards-compat proxy so existing `db.execute(...)` calls keep working
-export const db = new Proxy({} as ReturnType<typeof createClient>, {
-  get(_target, prop) {
-    return (getDb() as unknown as Record<string | symbol, unknown>)[prop]
-  },
-})

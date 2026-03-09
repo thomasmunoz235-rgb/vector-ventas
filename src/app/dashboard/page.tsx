@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import type { Business } from '@/types/business'
 import { BusinessesTable } from '@/components/BusinessesTable'
 import { cookies } from 'next/headers'

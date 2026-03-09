@@ -13,32 +13,38 @@ function verifyPassword(password: string, stored: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
-  const { user, pass } = body
+  try {
+    const body = await request.json()
+    const { user, pass } = body
 
-  if (!user || !pass) {
-    return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
+    if (!user || !pass) {
+      return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
+    }
+
+    const result = await db.execute({
+      sql: 'SELECT username, password_hash FROM users WHERE username = ? LIMIT 1',
+      args: [user],
+    })
+
+    if (result.rows.length === 0 || !verifyPassword(pass, result.rows[0].password_hash as string)) {
+      return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
+    }
+
+    const token = await createSessionToken(result.rows[0].username as string)
+
+    const response = NextResponse.json({ ok: true })
+    response.cookies.set('session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    })
+
+    return response
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Login error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  const result = await db.execute({
-    sql: 'SELECT username, password_hash FROM users WHERE username = ? LIMIT 1',
-    args: [user],
-  })
-
-  if (result.rows.length === 0 || !verifyPassword(pass, result.rows[0].password_hash as string)) {
-    return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
-  }
-
-  const token = await createSessionToken(result.rows[0].username as string)
-
-  const response = NextResponse.json({ ok: true })
-  response.cookies.set('session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 días
-  })
-
-  return response
 }

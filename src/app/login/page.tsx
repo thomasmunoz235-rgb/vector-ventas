@@ -24,7 +24,8 @@ export default function LoginPage() {
         router.push('/dashboard')
         router.refresh()
       } else {
-        setError('Usuario o contraseña incorrectos')
+        const data = await res.json().catch(() => ({}))
+        setError(res.status === 401 ? 'Usuario o contraseña incorrectos' : `Error del servidor (${res.status}): ${data.error ?? 'desconocido'}`)
       }
     } catch {
       setError('Error de conexión')

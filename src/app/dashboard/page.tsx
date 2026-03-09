@@ -51,12 +51,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const [result, countResult, uniqueResult] = await Promise.all([
-    db.execute({
+    getDb().execute({
       sql: `SELECT * FROM businesses ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
       args: [...args, PAGE_SIZE, offset],
     }),
-    db.execute({ sql: `SELECT COUNT(*) as total FROM businesses ${where}`, args }),
-    db.execute(`
+    getDb().execute({ sql: `SELECT COUNT(*) as total FROM businesses ${where}`, args }),
+    getDb().execute(`
       SELECT
         GROUP_CONCAT(DISTINCT city) as cities,
         GROUP_CONCAT(DISTINCT category) as categories,

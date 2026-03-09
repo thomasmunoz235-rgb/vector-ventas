@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
 import { pbkdf2Sync, timingSafeEqual } from 'crypto'
 import { db } from '@/lib/db'

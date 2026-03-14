@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const result = await getDb().execute({
-      sql: 'SELECT username, password_hash FROM users WHERE username = ? LIMIT 1',
+      sql: 'SELECT id, username, password_hash FROM users WHERE username = ? LIMIT 1',
       args: [user],
     })
 
@@ -30,7 +30,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 })
     }
 
-    const token = await createSessionToken(result.rows[0].username as string)
+    const token = await createSessionToken(
+      result.rows[0].username as string,
+      result.rows[0].id as number,
+    )
 
     const response = NextResponse.json({ ok: true })
     response.cookies.set('session', token, {

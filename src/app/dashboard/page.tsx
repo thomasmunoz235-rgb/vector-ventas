@@ -3,6 +3,7 @@ import type { Business } from '@/types/business'
 import { BusinessesTable } from '@/components/BusinessesTable'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { getSessionUser } from '@/lib/auth'
 
 const PAGE_SIZE = 200
 
@@ -21,9 +22,12 @@ type SearchParams = {
   website_type?: string
   web_scrape_status?: string
   contacted?: string
+  in_campaign?: string
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
+  const user = await getSessionUser()
+
   const page = Math.max(1, parseInt(searchParams.page ?? '1') || 1)
   const offset = (page - 1) * PAGE_SIZE
   const search = searchParams.search?.trim() ?? ''
@@ -32,7 +36,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const status = searchParams.status ?? ''
   const website_type = searchParams.website_type ?? ''
   const web_scrape_status = searchParams.web_scrape_status ?? ''
-  const contacted = searchParams.contacted ?? '' // '1', '0', or ''
+  const contacted = searchParams.contacted ?? ''
+  const in_campaign = searchParams.in_campaign ?? ''
 
   const conditions: string[] = []
   const args: (string | number)[] = []
@@ -47,12 +52,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   if (website_type) { conditions.push('website_type = ?'); args.push(website_type) }
   if (web_scrape_status) { conditions.push('web_scrape_status = ?'); args.push(web_scrape_status) }
   if (contacted === '1' || contacted === '0') { conditions.push('contacted = ?'); args.push(Number(contacted)) }
+  if (in_campaign === '1' && user) {
+    conditions.push(`id IN (
+      SELECT m.business_id FROM wa_messages m
+      JOIN wa_campaigns c ON m.campaign_id = c.id
+      WHERE c.user_id = ? AND c.status IN ('pending', 'running') AND m.status = 'pending'
+    )`)
+    args.push(user.id)
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const [result, countResult, uniqueResult] = await Promise.all([
     getDb().execute({
-      sql: `SELECT * FROM businesses ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT id, place_id, name, address, phone, website, rating, total_ratings, category, city, types, status, website_type, web_scrape_status, email, ig_handle, contacted, created_at, updated_at FROM businesses ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
       args: [...args, PAGE_SIZE, offset],
     }),
     getDb().execute({ sql: `SELECT COUNT(*) as total FROM businesses ${where}`, args }),
@@ -102,7 +115,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     updated_at: (row.updated_at as number) ?? null,
   }))
 
-  const filters = { search, city, category, status, website_type, web_scrape_status, contacted }
+  const filters = { search, city, category, status, website_type, web_scrape_status, contacted, in_campaign }
 
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden">
@@ -119,6 +132,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         </div>
         <div className="flex items-center gap-5">
           <span className="text-zinc-600 text-xs font-mono">{total.toLocaleString('es')} registros</span>
+          <a href="/dashboard/whatsapp" className="text-xs text-zinc-500 hover:text-white transition-colors">WhatsApp</a>
           <form action={logout}>
             <button type="submit" className="text-xs text-zinc-500 hover:text-white transition-colors">Salir →</button>
           </form>

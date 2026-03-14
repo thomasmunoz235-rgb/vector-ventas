@@ -1,6 +1,6 @@
 // Lightweight signed session token (no external deps, works on Edge runtime)
 // Format: base64url(payload)|signature
-// Payload: { u: username, exp: unix timestamp }
+// Payload: { u: username, id: userId, exp: unix timestamp }
 
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7 // 7 days
 
@@ -25,9 +25,10 @@ async function hmac(secret: string, data: string): Promise<string> {
   return base64url(String.fromCharCode(...new Uint8Array(sig)))
 }
 
-export async function createSessionToken(username: string): Promise<string> {
+export async function createSessionToken(username: string, id: number): Promise<string> {
   const payload = base64url(JSON.stringify({
     u: username,
+    id,
     exp: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS,
   }))
   const secret = process.env.SESSION_SECRET!
@@ -35,7 +36,7 @@ export async function createSessionToken(username: string): Promise<string> {
   return `${payload}|${sig}`
 }
 
-export async function verifySessionToken(token: string): Promise<{ username: string } | null> {
+export async function verifySessionToken(token: string): Promise<{ username: string; id: number } | null> {
   try {
     const [payload, sig] = token.split('|')
     if (!payload || !sig) return null
@@ -51,8 +52,9 @@ export async function verifySessionToken(token: string): Promise<{ username: str
 
     const data = JSON.parse(fromBase64url(payload))
     if (Math.floor(Date.now() / 1000) > data.exp) return null
+    if (!data.id || typeof data.id !== 'number') return null  // token viejo sin id → re-login
 
-    return { username: data.u }
+    return { username: data.u, id: data.id }
   } catch {
     return null
   }

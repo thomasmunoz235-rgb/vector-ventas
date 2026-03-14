@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useTransition } from 'react'
+import { useState, useCallback, useEffect, useRef, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createColumnHelper,
@@ -258,6 +258,220 @@ const columns = [
   }),
 ]
 
+// ─── New Business Modal ───────────────────────────────────────────────────────
+
+function NewBusinessModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ name: '', phone: '', category: '', city: '', email: '', website: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }))
+
+  async function handleSubmit() {
+    if (!form.name.trim()) { setError('El nombre es obligatorio'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/businesses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Error al crear'); setSaving(false); return }
+      onCreated()
+    } catch {
+      setError('Error de red')
+      setSaving(false)
+    }
+  }
+
+  const fields: [string, string, string][] = [
+    ['name', 'Nombre *', 'Ej: La Pizzería de Juan'],
+    ['phone', 'Teléfono', 'Ej: 5491112345678'],
+    ['category', 'Categoría', 'Ej: Restaurante'],
+    ['city', 'Ciudad', 'Ej: Buenos Aires'],
+    ['email', 'Email', 'Ej: contacto@local.com'],
+    ['website', 'Website', 'Ej: https://local.com'],
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl w-full max-w-sm mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-900">
+          <h2 className="text-white text-sm font-semibold">Nuevo local</h2>
+          <button onClick={onClose} className="text-zinc-600 hover:text-white transition-colors">✕</button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          {fields.map(([key, label, placeholder]) => (
+            <div key={key} className="space-y-1">
+              <label className="text-xs text-zinc-500">{label}</label>
+              <input
+                value={form[key as keyof typeof form]}
+                onChange={e => set(key, e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder={placeholder}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-600 placeholder:text-zinc-700"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-4 border-t border-zinc-900 space-y-2">
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="w-full py-2 text-sm bg-white text-black rounded-md hover:bg-zinc-100 transition-colors disabled:opacity-50 font-medium"
+          >
+            {saving ? 'Creando...' : 'Crear local'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Campaign Modal ───────────────────────────────────────────────────────────
+
+function CampaignModal({
+  businesses,
+  onClose,
+  onCreated,
+}: {
+  businesses: Business[]
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [name, setName] = useState('')
+  const [template, setTemplate] = useState('')
+  const [loadingTemplate, setLoadingTemplate] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/whatsapp/template')
+      .then(r => r.json())
+      .then(d => { setTemplate(d.body ?? ''); setLoadingTemplate(false) })
+      .catch(() => setLoadingTemplate(false))
+  }, [])
+
+  const preview = (name: string) =>
+    template.replace(/\{nombre\}/gi, name).replace(/\{negocio\}/gi, name)
+
+  const withPhone = businesses.filter(b => b.phone)
+  const withoutPhone = businesses.filter(b => !b.phone)
+
+  async function handleCreate() {
+    setCreating(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/whatsapp/campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim() || 'Sin nombre',
+          businessIds: withPhone.map(b => b.id),
+          templateOverride: template,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Error al crear campaña'); setCreating(false); return }
+      onCreated()
+    } catch {
+      setError('Error de red')
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-900">
+          <div>
+            <h2 className="text-white text-sm font-semibold">Nueva campaña WA</h2>
+            <p className="text-zinc-500 text-xs mt-0.5">
+              {withPhone.length} con teléfono
+              {withoutPhone.length > 0 && <span className="text-zinc-700"> · {withoutPhone.length} sin teléfono (se omiten)</span>}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-zinc-600 hover:text-white transition-colors">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Nombre de campaña */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Nombre de campaña</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Ej: Restaurantes CABA mayo"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 placeholder:text-zinc-700"
+            />
+          </div>
+
+          {/* Template */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Mensaje</label>
+            {loadingTemplate ? (
+              <div className="h-20 bg-zinc-900 rounded-md animate-pulse" />
+            ) : (
+              <textarea
+                value={template}
+                onChange={e => setTemplate(e.target.value)}
+                rows={3}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-zinc-600"
+              />
+            )}
+            <p className="text-zinc-700 text-xs">Usá <code className="text-zinc-500">{'{nombre}'}</code> para personalizar</p>
+          </div>
+
+          {/* Preview del primer contacto */}
+          {withPhone.length > 0 && template && (
+            <div className="space-y-2">
+              <label className="text-xs text-zinc-500 uppercase tracking-wider">Preview</label>
+              <div className="bg-zinc-900 rounded-md px-3 py-2 text-sm text-zinc-300 italic">
+                {preview(withPhone[0].name ?? 'nombre')}
+              </div>
+            </div>
+          )}
+
+          {/* Lista de seleccionados */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">
+              Contactos ({withPhone.length})
+            </label>
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+              {businesses.map(b => (
+                <div key={b.id} className="flex items-center justify-between text-xs py-1 border-b border-zinc-900">
+                  <span className={b.phone ? 'text-zinc-300' : 'text-zinc-700 line-through'}>
+                    {b.name ?? '—'}
+                  </span>
+                  <span className="text-zinc-600 font-mono">{b.phone ?? 'sin teléfono'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-zinc-900 space-y-2">
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <button
+            onClick={handleCreate}
+            disabled={creating || withPhone.length === 0 || !template.trim() || !name.trim()}
+            className="w-full py-2.5 text-sm bg-white text-black rounded-md hover:bg-zinc-100 transition-colors disabled:opacity-40 font-medium"
+          >
+            {creating ? 'Creando campaña...' : `Crear campaña · ${withPhone.length} mensajes`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Filters = {
@@ -268,6 +482,7 @@ type Filters = {
   website_type: string
   web_scrape_status: string
   contacted: string
+  in_campaign: string
 }
 
 type UniqueValues = {
@@ -306,6 +521,40 @@ export function BusinessesTable({
   const [showColPanel, setShowColPanel] = useState(false)
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null)
   const [searchInput, setSearchInput] = useState(filters.search)
+
+  // ── Modo campaña WA ──
+  const [showNewModal, setShowNewModal] = useState(false)
+  const [campaignMode, setCampaignMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [assignedBusinesses, setAssignedBusinesses] = useState<Record<number, string>>({})
+  const MAX_CAMPAIGN = 100
+
+  useEffect(() => {
+    fetch('/api/whatsapp/assigned-businesses')
+      .then(r => r.json())
+      .then(d => setAssignedBusinesses(d.assigned ?? {}))
+      .catch(() => {})
+  }, [])
+
+  const toggleCampaignMode = () => {
+    setCampaignMode(v => !v)
+    setSelectedIds(new Set())
+  }
+
+  const toggleSelect = (id: number) => {
+    if (assignedBusinesses[id]) return
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) { next.delete(id) } else if (next.size < MAX_CAMPAIGN) { next.add(id) }
+      return next
+    })
+  }
+
+  const selectFirst100 = () => {
+    const ids = data.filter(b => b.phone && !assignedBusinesses[b.id]).slice(0, MAX_CAMPAIGN).map(b => b.id)
+    setSelectedIds(new Set(ids))
+  }
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { setData(initialData) }, [initialData])
@@ -320,6 +569,7 @@ export function BusinessesTable({
     if (merged.website_type) params.set('website_type', merged.website_type)
     if (merged.web_scrape_status) params.set('web_scrape_status', merged.web_scrape_status)
     if (merged.contacted === '1' || merged.contacted === '0') params.set('contacted', merged.contacted)
+    if (merged.in_campaign === '1') params.set('in_campaign', '1')
     if (newPage > 1) params.set('page', String(newPage))
     startTransition(() => { router.push(`/dashboard?${params.toString()}`) })
   }, [filters, router])
@@ -367,8 +617,13 @@ export function BusinessesTable({
     }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const tableData = useMemo(
+    () => campaignMode ? data.filter(b => b.phone) : data,
+    [campaignMode, data]
+  )
+
   const table = useReactTable({
-    data,
+    data: tableData,
     columns,
     getRowId: row => String(row.id),
     state: { sorting, columnVisibility },
@@ -398,7 +653,7 @@ export function BusinessesTable({
     URL.revokeObjectURL(url)
   }
 
-  const hasFilters = filters.search || filters.city || filters.category || filters.status || filters.website_type || filters.web_scrape_status || filters.contacted
+  const hasFilters = filters.search || filters.city || filters.category || filters.status || filters.website_type || filters.web_scrape_status || filters.contacted || filters.in_campaign
 
   return (
     <div className={`flex flex-col h-full transition-opacity ${isPending ? 'opacity-60' : ''}`}>
@@ -451,6 +706,17 @@ export function BusinessesTable({
           ))}
         </div>
 
+        <button
+          onClick={() => navigate({ in_campaign: filters.in_campaign === '1' ? '' : '1' })}
+          className={`text-xs px-2.5 py-1.5 rounded border transition-colors flex-shrink-0 ${
+            filters.in_campaign === '1'
+              ? 'bg-zinc-800 text-white border-zinc-700'
+              : 'text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300'
+          }`}
+        >
+          En campaña
+        </button>
+
         {hasFilters && (
           <button
             onClick={clearFilters}
@@ -500,7 +766,58 @@ export function BusinessesTable({
         >
           CSV
         </button>
+
+        <button
+          onClick={() => setShowNewModal(true)}
+          className="text-xs text-zinc-300 border border-zinc-700 px-2.5 py-1.5 rounded hover:border-zinc-500 hover:text-white transition-colors flex-shrink-0"
+        >
+          + Nuevo local
+        </button>
+
+        <button
+          onClick={toggleCampaignMode}
+          className={`text-xs px-2.5 py-1.5 rounded border transition-colors flex-shrink-0 ${
+            campaignMode
+              ? 'bg-white text-black border-white'
+              : 'text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300'
+          }`}
+        >
+          {campaignMode ? `WA: ${selectedIds.size}/100` : 'Campaña WA'}
+        </button>
       </div>
+
+      {/* ─── Barra campaña ─── */}
+      {campaignMode && (
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-zinc-950 border-b border-zinc-800">
+          <span className="text-xs text-zinc-400">
+            <span className="text-white font-mono">{selectedIds.size}</span>
+            <span className="text-zinc-600"> / {MAX_CAMPAIGN} seleccionados</span>
+          </span>
+          <button
+            onClick={selectFirst100}
+            className="text-xs text-zinc-400 hover:text-white transition-colors"
+          >
+            Seleccionar 100 primeros
+          </button>
+          {selectedIds.size > 0 && (
+            <>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+              >
+                Limpiar
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={() => setShowCampaignModal(true)}
+                className="text-xs bg-white text-black px-3 py-1.5 rounded hover:bg-zinc-100 transition-colors font-medium"
+              >
+                Vista previa →
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ─── Table ─── */}
       <div className="flex-1 overflow-auto">
@@ -527,29 +844,55 @@ export function BusinessesTable({
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map(row => (
-              <tr
-                key={row.id}
-                onClick={() => setSelectedBusiness(row.original)}
-                className="border-b border-zinc-950 hover:bg-zinc-950/70 transition-colors cursor-pointer"
-              >
-                {row.getVisibleCells().map(cell => (
-                  <td
-                    key={cell.id}
-                    style={{ width: cell.column.getSize() }}
-                    className="px-4 py-2 text-sm"
-                    onClick={e => {
-                      // Don't open popup when clicking editable cells
-                      if (cell.column.id !== 'id' && cell.column.id !== 'contacted') {
-                        e.stopPropagation()
-                      }
-                    }}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {table.getRowModel().rows.map(row => {
+              const isSelected = selectedIds.has(row.original.id)
+              const assignedCampaign = assignedBusinesses[row.original.id]
+              const isAssigned = Boolean(assignedCampaign)
+              return (
+                <tr
+                  key={row.id}
+                  onClick={() => campaignMode ? toggleSelect(row.original.id) : setSelectedBusiness(row.original)}
+                  className={`border-b border-zinc-950 transition-colors cursor-pointer ${
+                    campaignMode && isSelected ? 'bg-zinc-900' :
+                    campaignMode && isAssigned ? 'opacity-40 cursor-not-allowed' :
+                    'hover:bg-zinc-950/70'
+                  }`}
+                >
+                  {campaignMode && (
+                    <td className="px-4 py-2 w-10" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(row.original.id)}
+                        className="accent-white cursor-pointer"
+                        disabled={isAssigned || (!isSelected && selectedIds.size >= MAX_CAMPAIGN)}
+                      />
+                    </td>
+                  )}
+                  {row.getVisibleCells().map((cell, i) => (
+                    <td
+                      key={cell.id}
+                      style={{ width: cell.column.getSize() }}
+                      className="px-4 py-2 text-sm"
+                      onClick={e => {
+                        if (!campaignMode && cell.column.id !== 'id' && cell.column.id !== 'contacted') {
+                          e.stopPropagation()
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="min-w-0">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
+                        {isAssigned && cell.column.id === 'name' && (
+                          <span className="flex-shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-emerald-950 text-emerald-400 border border-emerald-900 whitespace-nowrap">
+                            WA · {assignedCampaign}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 
@@ -587,13 +930,37 @@ export function BusinessesTable({
       </div>
 
       {/* ─── Row Popup ─── */}
-      {selectedBusiness && (
+      {selectedBusiness && !campaignMode && (
         <RowPopup
           business={selectedBusiness}
           onClose={() => setSelectedBusiness(null)}
           onToggleContacted={async () => {
             const newVal = selectedBusiness.contacted ? 0 : 1
             await updateData(String(selectedBusiness.id), 'contacted', newVal)
+          }}
+        />
+      )}
+
+      {/* ─── New Business Modal ─── */}
+      {showNewModal && (
+        <NewBusinessModal
+          onClose={() => setShowNewModal(false)}
+          onCreated={() => {
+            setShowNewModal(false)
+            router.refresh()
+          }}
+        />
+      )}
+
+      {/* ─── Campaign Modal ─── */}
+      {showCampaignModal && (
+        <CampaignModal
+          businesses={data.filter(b => selectedIds.has(b.id))}
+          onClose={() => setShowCampaignModal(false)}
+          onCreated={() => {
+            setShowCampaignModal(false)
+            setCampaignMode(false)
+            setSelectedIds(new Set())
           }}
         />
       )}

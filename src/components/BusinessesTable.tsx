@@ -345,19 +345,44 @@ function CampaignModal({
 }) {
   const [name, setName] = useState('')
   const [template, setTemplate] = useState('')
+  const [cargo, setCargo] = useState('')
+  const [nombreUsuario, setNombreUsuario] = useState('')
   const [loadingTemplate, setLoadingTemplate] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const FIRMA = '\n\n🌐 https://vector-ia.com.ar/\n📧 team@vector-ia.com.ar'
+
   useEffect(() => {
     fetch('/api/whatsapp/template')
       .then(r => r.json())
-      .then(d => { setTemplate(d.body ?? ''); setLoadingTemplate(false) })
+      .then(d => {
+        setTemplate(d.body ?? '')
+        setCargo(d.cargo ?? '')
+        setNombreUsuario(d.username ?? '')
+        setLoadingTemplate(false)
+      })
       .catch(() => setLoadingTemplate(false))
   }, [])
 
-  const preview = (name: string) =>
-    template.replace(/\{nombre\}/gi, name).replace(/\{negocio\}/gi, name)
+  const preview = (bizName: string) =>
+    template
+      .replace(/\{nombre\}/gi, bizName)
+      .replace(/\{negocio\}/gi, bizName)
+      .replace(/\{nombre de la empresa\}/gi, 'Vector-IA')
+      .replace(/\{nombre del usuario\}/gi, nombreUsuario)
+      .replace(/\{cargo\}/gi, cargo)
+      + FIRMA
+
+  function renderWhatsAppText(text: string) {
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const html = escaped
+      .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+      .replace(/_(.*?)_/g, '<em>$1</em>')
+      .replace(/~(.*?)~/g, '<del>$1</del>')
+      .replace(/\n/g, '<br>')
+    return { __html: html }
+  }
 
   const withPhone = businesses.filter(b => b.phone)
   const withoutPhone = businesses.filter(b => !b.phone)
@@ -373,6 +398,8 @@ function CampaignModal({
           name: name.trim() || 'Sin nombre',
           businessIds: withPhone.map(b => b.id),
           templateOverride: template,
+          cargoOverride: cargo,
+          nombreUsuarioOverride: nombreUsuario,
         }),
       })
       const data = await res.json()
@@ -425,16 +452,39 @@ function CampaignModal({
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-zinc-600"
               />
             )}
-            <p className="text-zinc-700 text-xs">Usá <code className="text-zinc-500">{'{nombre}'}</code> para personalizar</p>
+            <p className="text-zinc-700 text-xs">
+              Variables: <code className="text-zinc-500">{'{nombre}'}</code> · <code className="text-zinc-500">{'{nombre de la empresa}'}</code> · <code className="text-zinc-500">{'{nombre del usuario}'}</code> · <code className="text-zinc-500">{'{cargo}'}</code>
+            </p>
+            <div className="pt-1 grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-zinc-500 uppercase tracking-wider">Tu nombre</label>
+                <input
+                  value={nombreUsuario}
+                  onChange={e => setNombreUsuario(e.target.value)}
+                  placeholder="Ej: Agustín"
+                  className="mt-1.5 w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 placeholder:text-zinc-700"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 uppercase tracking-wider">Tu cargo</label>
+                <input
+                  value={cargo}
+                  onChange={e => setCargo(e.target.value)}
+                  placeholder="Ej: Asesor comercial"
+                  className="mt-1.5 w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 placeholder:text-zinc-700"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Preview del primer contacto */}
           {withPhone.length > 0 && template && (
             <div className="space-y-2">
               <label className="text-xs text-zinc-500 uppercase tracking-wider">Preview</label>
-              <div className="bg-zinc-900 rounded-md px-3 py-2 text-sm text-zinc-300 italic">
-                {preview(withPhone[0].name ?? 'nombre')}
-              </div>
+              <div
+                className="bg-zinc-900 rounded-md px-3 py-2 text-sm text-zinc-300 italic"
+                dangerouslySetInnerHTML={renderWhatsAppText(preview(withPhone[0].name ?? 'nombre'))}
+              />
             </div>
           )}
 

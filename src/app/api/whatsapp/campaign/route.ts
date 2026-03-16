@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUserFromToken(req.cookies.get('session')?.value)
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { name, businessIds, templateOverride } = await req.json()
+  const { name, businessIds, templateOverride, cargoOverride, nombreUsuarioOverride } = await req.json()
   if (!Array.isArray(businessIds) || businessIds.length === 0) {
     return NextResponse.json({ error: 'businessIds requerido' }, { status: 400 })
   }
@@ -20,10 +20,13 @@ export async function POST(req: NextRequest) {
 
   // Template
   const templateRow = await db.execute({
-    sql: `SELECT body FROM wa_template WHERE user_id = ? LIMIT 1`,
+    sql: `SELECT body, cargo FROM wa_template WHERE user_id = ? LIMIT 1`,
     args: [user.id],
   })
+  const FIRMA = '\n\n🌐 https://vector-ia.com.ar/\n📧 team@vector-ia.com.ar'
+
   const templateBody = templateOverride ?? (templateRow.rows[0]?.body as string) ?? 'Hola {nombre}, te contactamos desde Vector-IA.'
+  const userCargo = cargoOverride ?? (templateRow.rows[0]?.cargo as string) ?? ''
 
   // Obtener negocios con teléfono válido que no estén en otra campaña activa
   const placeholders = businessIds.map(() => '?').join(',')
@@ -60,6 +63,10 @@ export async function POST(req: NextRequest) {
       const body = templateBody
         .replace(/\{nombre\}/gi, bizName)
         .replace(/\{negocio\}/gi, bizName)
+        .replace(/\{nombre de la empresa\}/gi, 'Vector-IA')
+        .replace(/\{nombre del usuario\}/gi, nombreUsuarioOverride ?? user.username)
+        .replace(/\{cargo\}/gi, userCargo)
+        + FIRMA
       return {
         sql: `INSERT INTO wa_messages (user_id, business_id, campaign_id, phone, direction, body, status, created_at)
               VALUES (?, ?, ?, ?, 'out', ?, 'pending', ?)`,

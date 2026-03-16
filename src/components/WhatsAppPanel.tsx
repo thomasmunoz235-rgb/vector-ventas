@@ -276,7 +276,9 @@ export function WhatsAppPanel({ initialTemplate, initialCampaigns, initialSessio
               <div className="border border-zinc-900 rounded-lg p-5 space-y-3">
                 <div>
                   <p className="text-white text-sm font-medium">Mensaje de campaña</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Usá <code className="text-zinc-400">{'{nombre}'}</code> para personalizar</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">
+                    Variables: <code className="text-zinc-400">{'{nombre}'}</code> · <code className="text-zinc-400">{'{nombre de la empresa}'}</code> · <code className="text-zinc-400">{'{nombre del usuario}'}</code> · <code className="text-zinc-400">{'{cargo}'}</code>
+                  </p>
                 </div>
                 <textarea
                   value={template}

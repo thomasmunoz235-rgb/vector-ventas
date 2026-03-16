@@ -133,6 +133,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         <div className="flex items-center gap-5">
           <span className="text-zinc-600 text-xs font-mono">{total.toLocaleString('es')} registros</span>
           <a href="/dashboard/whatsapp" className="text-xs text-zinc-500 hover:text-white transition-colors">WhatsApp</a>
+          {user?.username === 'admin' && (
+            <a href="/dashboard/admin/users" className="text-xs text-zinc-500 hover:text-white transition-colors">Usuarios</a>
+          )}
           <form action={logout}>
             <button type="submit" className="text-xs text-zinc-500 hover:text-white transition-colors">Salir →</button>
           </form>
